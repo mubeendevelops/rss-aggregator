@@ -38,8 +38,8 @@ func urlToFeed(url string) (RSSFeed, error) {
 	data, err := io.ReadAll(res.Body)
 	if err != nil {
 		return RSSFeed{}, err
-
 	}
+
 	rssFeed := RSSFeed{}
 
 	err = xml.Unmarshal(data, &rssFeed)
