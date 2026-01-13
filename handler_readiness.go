@@ -1,7 +1,10 @@
 package main
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+)
 
 func handlerReadiness(w http.ResponseWriter, r *http.Request) {
-	respondWithJSON(w, 200, struct{}{})
+	respondWithJSON(w, 200, fmt.Sprintf("Server working"))
 }

@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RSS Aggregator API Demo</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+      body {
+        font-family: system-ui, -apple-system, sans-serif;
+        padding: 20px;
+        background: #f5f5f5;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      h1 {
+        margin-bottom: 20px;
+        color: #333;
+      }
+      .section {
+        background: white;
+        padding: 20px;
+        margin-bottom: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      }
+      .section h2 {
+        margin-bottom: 15px;
+        color: #555;
+        font-size: 18px;
+      }
+      input,
+      button {
+        padding: 8px 12px;
+        margin: 5px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      input {
+        width: 200px;
+      }
+      button {
+        background: #007bff;
+        color: white;
+        border: none;
+        cursor: pointer;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      button:disabled {
+        background: #ccc;
+        cursor: not-allowed;
+      }
+      .api-key {
+        background: #fff3cd;
+        padding: 10px;
+        border-radius: 4px;
+        margin-bottom: 15px;
+      }
+      .api-key input {
+        width: 100%;
+        max-width: 500px;
+      }
+      .result {
+        margin-top: 10px;
+        padding: 10px;
+        background: #f8f9fa;
+        border-radius: 4px;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      .result pre {
+        white-space: pre-wrap;
+        word-wrap: break-word;
+        font-size: 12px;
+      }
+      .error {
+        background: #f8d7da;
+        color: #721c24;
+      }
+      .success {
+        background: #d4edda;
+        color: #155724;
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 20px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>RSS Aggregator API Demo</h1>
+
+      <div class="section">
+        <h2>API Configuration</h2>
+        <label
+          >API Base URL:
+          <input
+            type="text"
+            id="apiBase"
+            value="http://localhost:8080/v1"
+            style="width: 300px"
+        /></label>
+      </div>
+
+      <div class="section">
+        <h2>1. Authentication</h2>
+        <div class="api-key">
+          <label
+            >API Key:
+            <input
+              type="text"
+              id="apiKey"
+              placeholder="Will be set after creating user"
+          /></label>
+        </div>
+        <div>
+          <input type="text" id="userName" placeholder="Enter your name" />
+          <button onclick="createUser()">Create User</button>
+        </div>
+        <div id="authResult" class="result" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h2>2. User Routes</h2>
+        <button onclick="getUser()">Get Current User</button>
+        <div id="userResult" class="result" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h2>3. Feed Routes</h2>
+        <div>
+          <input type="text" id="feedName" placeholder="Feed name" />
+          <input
+            type="text"
+            id="feedUrl"
+            placeholder="Feed URL (e.g., https://example.com/rss)"
+          />
+          <button onclick="createFeed()">Create Feed</button>
+        </div>
+        <button onclick="getFeeds()">Get All Feeds</button>
+        <div id="feedResult" class="result" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h2>4. Feed Follow Routes</h2>
+        <div>
+          <input
+            type="text"
+            id="followFeedId"
+            placeholder="Feed ID to follow"
+          />
+          <button onclick="createFeedFollow()">Follow Feed</button>
+        </div>
+        <button onclick="getFeedFollows()">Get My Feed Follows</button>
+        <div>
+          <input
+            type="text"
+            id="unfollowId"
+            placeholder="Feed Follow ID to unfollow"
+          />
+          <button onclick="deleteFeedFollow()">Unfollow</button>
+        </div>
+        <div id="followResult" class="result" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h2>5. Post Routes</h2>
+        <button onclick="getPosts()">Get My Posts</button>
+        <div id="postResult" class="result" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h2>6. Health Check</h2>
+        <button onclick="healthCheck()">Check Health</button>
+        <div id="healthResult" class="result" style="display: none"></div>
+      </div>
+    </div>
+
+    <script>
+      function getApiBase() {
+        return (
+          document.getElementById("apiBase").value || "http://localhost:8080/v1"
+        );
+      }
+
+      function getApiKey() {
+        return document.getElementById("apiKey").value;
+      }
+
+      function showResult(elementId, data, isError = false, route = "") {
+        const el = document.getElementById(elementId);
+        el.style.display = "block";
+        el.className = `result ${isError ? "error" : "success"}`;
+        const routeInfo = route
+          ? `<div style="margin-bottom: 8px; font-weight: bold; color: #666;">Route: [${route}]</div>`
+          : "";
+        el.innerHTML = `${routeInfo}<pre>${JSON.stringify(
+          data,
+          null,
+          2
+        )}</pre>`;
+      }
+
+      async function apiCall(endpoint, options = {}) {
+        try {
+          const apiKey = getApiKey();
+          const method = options.method || "GET";
+          const headers = {
+            "Content-Type": "application/json",
+            ...options.headers,
+          };
+
+          if (apiKey && options.requireAuth !== false) {
+            headers["Authorization"] = `ApiKey ${apiKey}`;
+          }
+
+          const response = await fetch(`${getApiBase()}${endpoint}`, {
+            ...options,
+            headers,
+          });
+
+          const data = await response.json();
+          const route = `${method} ${endpoint}`;
+
+          if (!response.ok) {
+            return { error: true, data, route };
+          }
+          return { error: false, data, route };
+        } catch (error) {
+          return {
+            error: true,
+            data: { error: error.message },
+            route: `${options.method || "GET"} ${endpoint}`,
+          };
+        }
+      }
+
+      async function createUser() {
+        const name = document.getElementById("userName").value;
+        if (!name) {
+          showResult("authResult", { error: "Name is required" }, true);
+          return;
+        }
+
+        const result = await apiCall("/users", {
+          method: "POST",
+          body: JSON.stringify({ name }),
+          requireAuth: false,
+        });
+
+        if (!result.error && result.data.api_key) {
+          document.getElementById("apiKey").value = result.data.api_key;
+        }
+        showResult("authResult", result.data, result.error, result.route);
+      }
+
+      async function getUser() {
+        const result = await apiCall("/users");
+        showResult("userResult", result.data, result.error, result.route);
+      }
+
+      async function createFeed() {
+        const name = document.getElementById("feedName").value;
+        const url = document.getElementById("feedUrl").value;
+
+        if (!name || !url) {
+          showResult(
+            "feedResult",
+            { error: "Name and URL are required" },
+            true,
+            "POST /feeds"
+          );
+          return;
+        }
+
+        const result = await apiCall("/feeds", {
+          method: "POST",
+          body: JSON.stringify({ name, url }),
+        });
+        showResult("feedResult", result.data, result.error, result.route);
+      }
+
+      async function getFeeds() {
+        const result = await apiCall("/feeds", { requireAuth: false });
+        showResult("feedResult", result.data, result.error, result.route);
+      }
+
+      async function createFeedFollow() {
+        const feedId = document.getElementById("followFeedId").value;
+        if (!feedId) {
+          showResult(
+            "followResult",
+            { error: "Feed ID is required" },
+            true,
+            "POST /feed_follows"
+          );
+          return;
+        }
+
+        const result = await apiCall("/feed_follows", {
+          method: "POST",
+          body: JSON.stringify({ feed_id: feedId }),
+        });
+        showResult("followResult", result.data, result.error, result.route);
+      }
+
+      async function getFeedFollows() {
+        const result = await apiCall("/feed_follows");
+        showResult("followResult", result.data, result.error, result.route);
+      }
+
+      async function deleteFeedFollow() {
+        const followId = document.getElementById("unfollowId").value;
+        if (!followId) {
+          showResult(
+            "followResult",
+            { error: "Feed Follow ID is required" },
+            true,
+            "DELETE /feed_follows/{id}"
+          );
+          return;
+        }
+
+        const result = await apiCall(`/feed_follows/${followId}`, {
+          method: "DELETE",
+        });
+        showResult("followResult", result.data, result.error, result.route);
+      }
+
+      async function getPosts() {
+        const result = await apiCall("/posts");
+        showResult("postResult", result.data, result.error, result.route);
+      }
+
+      async function healthCheck() {
+        const result = await apiCall("/healthz", { requireAuth: false });
+        showResult("healthResult", result.data, result.error, result.route);
+      }
+    </script>
+  </body>
+</html>
