@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 	"github.com/mubeencodes/rss-aggregator/internal/database"
 )
 
-func (apiCfg *apiConfig) handlerCreateFeed(w http.ResponseWriter, r *http.Request, user database.User) {
+func (apiCfg *Config) handlerCreateFeed(w http.ResponseWriter, r *http.Request, user database.User) {
 	type parameters struct {
 		Name string `json:"name"`
 		URL  string `json:"url"`
@@ -49,7 +49,7 @@ func (apiCfg *apiConfig) handlerCreateFeed(w http.ResponseWriter, r *http.Reques
 	respondWithJSON(w, 201, databaseFeedToFeed(feed))
 }
 
-func (apiCfg *apiConfig) handlerGetFeeds(w http.ResponseWriter, r *http.Request) {
+func (apiCfg *Config) handlerGetFeeds(w http.ResponseWriter, r *http.Request) {
 
 	feeds, err := apiCfg.DB.GetFeeds(r.Context())
 	if err != nil {

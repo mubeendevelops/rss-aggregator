@@ -1,4 +1,4 @@
-package main
+package rss
 
 import (
 	"context"
@@ -35,10 +35,17 @@ type RSSItem struct {
 }
 
 // feedHTTPClient fetches feeds. By default it refuses loopback, private and
-// link-local destinations, main replaces it when FEED_ALLOW_PRIVATE_ADDRESSES is set.
+// link-local destinations, AllowPrivateAddresses lifts that.
 var feedHTTPClient = newFeedHTTPClient(false)
 
-func urlToFeed(ctx context.Context, url string) (RSSFeed, error) {
+// AllowPrivateAddresses lets feeds be fetched from loopback, private and
+// link-local addresses. main calls it when FEED_ALLOW_PRIVATE_ADDRESSES is set.
+func AllowPrivateAddresses() {
+	feedHTTPClient = newFeedHTTPClient(true)
+}
+
+// FetchFeed downloads and parses the RSS feed at url
+func FetchFeed(ctx context.Context, url string) (RSSFeed, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return RSSFeed{}, err
@@ -102,8 +109,8 @@ var pubDateLayouts = []string{
 	"2006-01-02",
 }
 
-// parsePubDate parses the date formats commonly found in feeds and returns the time in UTC
-func parsePubDate(value string) (time.Time, error) {
+// ParsePubDate parses the date formats commonly found in feeds and returns the time in UTC
+func ParsePubDate(value string) (time.Time, error) {
 	value = strings.TrimSpace(value)
 	for _, layout := range pubDateLayouts {
 		if t, err := time.Parse(layout, value); err == nil {

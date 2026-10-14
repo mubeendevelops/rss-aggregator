@@ -114,7 +114,7 @@ The Makefile reads variables from `.env`. Use `make ENV_FILE=.env.example <targe
 
 All routes are prefixed with `/v1`. Requests and responses use JSON.
 
-> **Auth**: Authenticated routes expect an API key, typically via a header like `Authorization: ApiKey <your-key>`. Check `cmd/rss-aggregator/middleware_auth.go` and `internal/auth` for the exact header format if you adjust it.
+> **Auth**: Authenticated routes expect an API key, typically via a header like `Authorization: ApiKey <your-key>`. Check `internal/api/middleware_auth.go` and `internal/auth` for the exact header format if you adjust it.
 
 ### Status Codes
 
@@ -209,12 +209,12 @@ Errors have the shape `{"error": "message"}`. Database driver messages are never
 
 ## Background Scraper
 
-The scraper is started from `cmd/rss-aggregator/main.go`:
+The scraper lives in `internal/scraper` and is started from `cmd/rss-aggregator/main.go`:
 
-- **Function**: `startScraping(ctx context.Context, db database.Querier, cfg scraperConfig)`
+- **Function**: `scraper.Start(ctx context.Context, db database.Querier, cfg scraper.Config)`
 - **Behavior**:
   - Periodically selects the next feeds to fetch (`GetNextFeedsToFetch`), least recently fetched first, skipping feeds fetched within the minimum refetch interval.
-  - Spawns goroutines to fetch and parse RSS (`urlToFeed` in `cmd/rss-aggregator/rss.go`).
+  - Spawns goroutines to fetch and parse RSS (`rss.FetchFeed` in `internal/rss/rss.go`).
   - Inserts posts into the `posts` table via `CreatePost`, skipping duplicates on URL.
 
 Fetching is defensive: responses must be 200 and at most 10 MB, each cycle has a one minute timeout, and the HTTP client refuses to connect to loopback, private, link-local and unspecified addresses (checked after DNS resolution and on every redirect), so a feed URL cannot be used to reach internal services. Set `FEED_ALLOW_PRIVATE_ADDRESSES=true` to fetch from a feed server on your own machine while testing.
@@ -234,18 +234,21 @@ You can tune the scraper with environment variables (see `.env.example`). Invali
 ## Project Structure
 
 ```
-cmd/rss-aggregator/     package main: the server binary
-  main.go               entrypoint, configuration, server bootstrap, scraper start
-  router.go             routes and CORS
-  config.go             scraper settings from the environment
-  handler_*.go          HTTP handlers for users, feeds, feed follows, posts, readiness, error testing
+cmd/rss-aggregator/
+  main.go               entrypoint: configuration, database, server bootstrap, scraper start, shutdown
+internal/api/           HTTP layer
+  router.go             routes, CORS, api.Config
+  handler_*.go          handlers for users, feeds, feed follows, posts, readiness, error testing
   middleware_auth.go    authentication middleware using user API keys
   models.go, json.go    API response types and JSON helpers
   db_errors.go          maps database errors to HTTP status codes
   validate.go           request input validation
+internal/rss/           feed fetching and parsing
+  rss.go                RSS XML fetching, parsing and date formats
   feed_client.go        HTTP client for feeds with the private-address guard
-  rss.go                RSS XML fetching and parsing
+internal/scraper/       background worker
   scraper.go            periodic scraping logic and post creation
+  config.go             scraper settings from the environment
 internal/auth/          API key generation and header parsing
 internal/database/      sqlc-generated types and queries
 sql/schema/             goose migrations

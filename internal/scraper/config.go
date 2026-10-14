@@ -1,4 +1,4 @@
-package main
+package scraper
 
 import (
 	"fmt"
@@ -6,8 +6,8 @@ import (
 	"time"
 )
 
-// scraperConfig holds the scraper settings read from the environment
-type scraperConfig struct {
+// Config holds the scraper settings read from the environment
+type Config struct {
 	// Interval is the time between scrape cycles (SCRAPE_INTERVAL)
 	Interval time.Duration
 	// Concurrency is the most feeds fetched in one cycle (SCRAPE_CONCURRENCY)
@@ -16,7 +16,7 @@ type scraperConfig struct {
 	MinRefetchInterval time.Duration
 }
 
-var defaultScraperConfig = scraperConfig{
+var defaultConfig = Config{
 	Interval:           30 * time.Second,
 	Concurrency:        10,
 	MinRefetchInterval: 5 * time.Minute,
@@ -24,15 +24,15 @@ var defaultScraperConfig = scraperConfig{
 
 const maxScrapeConcurrency = 100
 
-// loadScraperConfig reads the scraper settings through getenv, which is os.Getenv outside tests.
+// LoadConfig reads the scraper settings through getenv, which is os.Getenv outside tests.
 // Unset variables keep their defaults, invalid ones are an error.
-func loadScraperConfig(getenv func(string) string) (scraperConfig, error) {
-	cfg := defaultScraperConfig
+func LoadConfig(getenv func(string) string) (Config, error) {
+	cfg := defaultConfig
 
 	if value := getenv("SCRAPE_INTERVAL"); value != "" {
 		interval, err := time.ParseDuration(value)
 		if err != nil || interval <= 0 {
-			return scraperConfig{}, fmt.Errorf("SCRAPE_INTERVAL must be a positive duration such as 30s or 2m, got %q", value)
+			return Config{}, fmt.Errorf("SCRAPE_INTERVAL must be a positive duration such as 30s or 2m, got %q", value)
 		}
 		cfg.Interval = interval
 	}
@@ -40,7 +40,7 @@ func loadScraperConfig(getenv func(string) string) (scraperConfig, error) {
 	if value := getenv("SCRAPE_CONCURRENCY"); value != "" {
 		concurrency, err := strconv.Atoi(value)
 		if err != nil || concurrency < 1 || concurrency > maxScrapeConcurrency {
-			return scraperConfig{}, fmt.Errorf("SCRAPE_CONCURRENCY must be a whole number from 1 to %d, got %q", maxScrapeConcurrency, value)
+			return Config{}, fmt.Errorf("SCRAPE_CONCURRENCY must be a whole number from 1 to %d, got %q", maxScrapeConcurrency, value)
 		}
 		cfg.Concurrency = concurrency
 	}
@@ -48,7 +48,7 @@ func loadScraperConfig(getenv func(string) string) (scraperConfig, error) {
 	if value := getenv("SCRAPE_MIN_REFETCH_INTERVAL"); value != "" {
 		minRefetch, err := time.ParseDuration(value)
 		if err != nil || minRefetch < 0 {
-			return scraperConfig{}, fmt.Errorf("SCRAPE_MIN_REFETCH_INTERVAL must be a duration such as 5m, or 0 to disable it, got %q", value)
+			return Config{}, fmt.Errorf("SCRAPE_MIN_REFETCH_INTERVAL must be a duration such as 5m, or 0 to disable it, got %q", value)
 		}
 		cfg.MinRefetchInterval = minRefetch
 	}
