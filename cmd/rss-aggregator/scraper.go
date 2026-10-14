@@ -4,13 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"log"
-	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/mubeencodes/rss-aggregator/internal/database"
 )
+
+// scrapeCycleTimeout bounds the database calls and HTTP requests of one cycle
+const scrapeCycleTimeout = time.Minute
 
 func startScraping(
 	db *database.Queries,
@@ -20,37 +22,44 @@ func startScraping(
 	log.Printf("Scraping on %v goroutines every %s duration", concurrency, timeBetweenRequest)
 	ticker := time.NewTicker(timeBetweenRequest)
 	for ; ; <-ticker.C {
-		feeds, err := db.GetNextFeedsToFetch(
-			context.Background(),
-			int32(concurrency),
-		)
-
-		if err != nil {
-			log.Println("error fetching feeds", err)
-			continue
-		}
-
-		wg := &sync.WaitGroup{}
-		for _, feed := range feeds {
-			wg.Add(1)
-
-			go scrapeFeed(db, wg, feed)
-		}
-
-		wg.Wait()
+		scrapeCycle(db, concurrency)
 	}
 }
 
-func scrapeFeed(db *database.Queries, wg *sync.WaitGroup, feed database.Feed) {
+func scrapeCycle(db *database.Queries, concurrency int) {
+	ctx, cancel := context.WithTimeout(context.Background(), scrapeCycleTimeout)
+	defer cancel()
+
+	feeds, err := db.GetNextFeedsToFetch(
+		ctx,
+		int32(concurrency),
+	)
+
+	if err != nil {
+		log.Println("error fetching feeds", err)
+		return
+	}
+
+	wg := &sync.WaitGroup{}
+	for _, feed := range feeds {
+		wg.Add(1)
+
+		go scrapeFeed(ctx, db, wg, feed)
+	}
+
+	wg.Wait()
+}
+
+func scrapeFeed(ctx context.Context, db *database.Queries, wg *sync.WaitGroup, feed database.Feed) {
 	defer wg.Done()
 
-	_, err := db.MarkFeedAsFetched(context.Background(), feed.ID)
+	_, err := db.MarkFeedAsFetched(ctx, feed.ID)
 	if err != nil {
 		log.Println("Error marking feed as fetched", err)
 		return
 	}
 
-	rssFeed, err := urlToFeed(feed.Url)
+	rssFeed, err := urlToFeed(ctx, feed.Url)
 	if err != nil {
 		log.Println("Error fetching feed", err)
 		return
@@ -63,13 +72,14 @@ func scrapeFeed(db *database.Queries, wg *sync.WaitGroup, feed database.Feed) {
 			description.Valid = true
 		}
 
-		pubAt, err := time.Parse(time.RFC1123Z, item.PubDate)
+		pubAt, err := parsePubDate(item.PubDate)
 		if err != nil {
 			log.Printf("Couldnt parse date %v with err %v", item.PubDate, err)
 			continue
 		}
 
-		_, err = db.CreatePost(context.Background(), database.CreatePostParams{
+		// duplicates are skipped by the database (ON CONFLICT DO NOTHING)
+		err = db.CreatePost(ctx, database.CreatePostParams{
 			ID:          uuid.New(),
 			CreatedAt:   time.Now().UTC(),
 			UpdatedAt:   time.Now().UTC(),
@@ -80,9 +90,6 @@ func scrapeFeed(db *database.Queries, wg *sync.WaitGroup, feed database.Feed) {
 			FeedID:      feed.ID,
 		})
 		if err != nil {
-			if strings.Contains(err.Error(), "duplicate key") {
-				continue
-			}
 			log.Println("failed to create post:", err)
 		}
 	}
