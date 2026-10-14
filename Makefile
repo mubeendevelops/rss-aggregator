@@ -22,10 +22,10 @@ sqlc:
 	sqlc generate
 
 run:
-	go run .
+	go run ./cmd/rss-aggregator
 
 build:
-	go build -o bin/rss-aggregator .
+	go build -o bin/rss-aggregator ./cmd/rss-aggregator
 
 lint:
 	golangci-lint run ./...

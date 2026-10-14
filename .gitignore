@@ -1,5 +1,5 @@
 .vscode/
-rss-aggregator
+/rss-aggregator
 .env
 vendor/
 prompt_plan.md

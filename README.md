@@ -81,7 +81,7 @@ Alternatively, you can apply the SQL files manually using any PostgreSQL client.
 ### 4. Run the Server
 
 ```bash
-make run        # go run .
+make run        # go run ./cmd/rss-aggregator
 ```
 
 The server will start on `http://localhost:$PORT` (default from `.env`, e.g. `8080`).
@@ -91,7 +91,7 @@ You’ll also see logs from the background scraper, which periodically fetches n
 ### 5. Try It
 
 - `make smoke` runs `scripts/smoke.sh`, a curl script that exercises every endpoint against the running server.
-- `index.html` is a static demo page. Open it from disk in a browser and it talks to the API at `http://localhost:8080/v1`.
+- `web/index.html` is a static demo page. Open it from disk in a browser and it talks to the API at `http://localhost:8080/v1`.
 
 ### Makefile Targets
 
@@ -112,7 +112,7 @@ The Makefile reads variables from `.env`. Use `make ENV_FILE=.env.example <targe
 
 All routes are prefixed with `/v1`. Requests and responses use JSON.
 
-> **Auth**: Authenticated routes expect an API key, typically via a header like `Authorization: ApiKey <your-key>`. Check `middleware_auth.go` and `internal/auth` for the exact header format if you adjust it.
+> **Auth**: Authenticated routes expect an API key, typically via a header like `Authorization: ApiKey <your-key>`. Check `cmd/rss-aggregator/middleware_auth.go` and `internal/auth` for the exact header format if you adjust it.
 
 ### Health
 
@@ -184,33 +184,38 @@ All routes are prefixed with `/v1`. Requests and responses use JSON.
 
 ## Background Scraper
 
-The scraper is started from `main.go`:
+The scraper is started from `cmd/rss-aggregator/main.go`:
 
 - **Function**: `startScraping(db *database.Queries, concurrency int, timeBetweenRequest time.Duration)`
 - **Behavior**:
   - Periodically selects the next feeds to fetch (`GetNextFeedsToFetch`).
-  - Spawns goroutines to fetch and parse RSS (`urlToFeed` in `rss.go`).
+  - Spawns goroutines to fetch and parse RSS (`urlToFeed` in `cmd/rss-aggregator/rss.go`).
   - Inserts posts into the `posts` table via `CreatePost`, skipping duplicates on URL.
 
 You can tune:
 
 - **Concurrency**: number of goroutines scraping in parallel.
-- **Interval**: how often feeds are fetched (currently 30 seconds in `main.go`).
+- **Interval**: how often feeds are fetched (currently 30 seconds in `cmd/rss-aggregator/main.go`).
 
 ---
 
 ## Project Structure
 
-- `main.go` – App entrypoint, router setup, CORS, server bootstrap, and scraper start.
-- `handler_*.go` – HTTP handlers for users, feeds, feed follows, posts, readiness, and error testing.
-- `middleware_auth.go` – Authentication middleware using user API keys.
-- `internal/database` – `sqlc`-generated types and queries.
-- `sql/schema` – Database schema migrations.
-- `sql/queries` – Source SQL used by `sqlc`.
-- `rss.go` – RSS XML parsing into Go structs.
-- `scraper.go` – Periodic scraping logic and post creation.
-- `index.html` – Static demo page for the API.
-- `scripts/smoke.sh` – End-to-end smoke test.
-- `docker-compose.yml`, `Makefile`, `.env.example` – Local development tooling.
+```
+cmd/rss-aggregator/     package main: the server binary
+  main.go               entrypoint, router setup, CORS, server bootstrap, scraper start
+  handler_*.go          HTTP handlers for users, feeds, feed follows, posts, readiness, error testing
+  middleware_auth.go    authentication middleware using user API keys
+  models.go, json.go    API response types and JSON helpers
+  rss.go                RSS XML fetching and parsing
+  scraper.go            periodic scraping logic and post creation
+internal/auth/          API key header parsing
+internal/database/      sqlc-generated types and queries
+sql/schema/             goose migrations
+sql/queries/            source SQL used by sqlc
+web/index.html          static demo page for the API
+scripts/smoke.sh        end-to-end smoke test
+docker-compose.yml, Makefile, .env.example    local development tooling
+```
 
 ---
