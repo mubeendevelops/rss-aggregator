@@ -6,5 +6,5 @@ RETURNING *;
 -- name: GetFeedFollows :many
 SELECT * FROM feed_follows WHERE user_id=$1;
 
--- name: DeleteFeedFollow :exec
+-- name: DeleteFeedFollow :execrows
 DELETE FROM feed_follows WHERE id=$1 AND user_id=$2;

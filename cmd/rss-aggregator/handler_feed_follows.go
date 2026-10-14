@@ -32,7 +32,7 @@ func (apiCfg *apiConfig) handlerCreateFeedFollow(w http.ResponseWriter, r *http.
 		FeedID:    params.FeedID,
 	})
 	if err != nil {
-		respondWithError(w, 400, fmt.Sprintf("Couldnt create feed follow: %v", err))
+		respondWithDBError(w, "create feed follow", err)
 		return
 	}
 
@@ -43,11 +43,11 @@ func (apiCfg *apiConfig) handlerGetFeedFollows(w http.ResponseWriter, r *http.Re
 
 	feedFollows, err := apiCfg.DB.GetFeedFollows(r.Context(), user.ID)
 	if err != nil {
-		respondWithError(w, 400, fmt.Sprintf("Couldnt get feed follows: %v", err))
+		respondWithDBError(w, "get feed follows", err)
 		return
 	}
 
-	respondWithJSON(w, 201, databaseFeedFollowsToFeedFollows(feedFollows))
+	respondWithJSON(w, 200, databaseFeedFollowsToFeedFollows(feedFollows))
 }
 
 func (apiCfg *apiConfig) handlerDeleteFeedFollow(w http.ResponseWriter, r *http.Request, user database.User) {
@@ -59,13 +59,18 @@ func (apiCfg *apiConfig) handlerDeleteFeedFollow(w http.ResponseWriter, r *http.
 		return
 	}
 
-	err = apiCfg.DB.DeleteFeedFollow(r.Context(), database.DeleteFeedFollowParams{
+	deleted, err := apiCfg.DB.DeleteFeedFollow(r.Context(), database.DeleteFeedFollowParams{
 		ID:     feedFollowID,
 		UserID: user.ID,
 	})
 
 	if err != nil {
-		respondWithError(w, 400, fmt.Sprintf("Couldnt delete feed follow: %v", err))
+		respondWithDBError(w, "delete feed follow", err)
+		return
+	}
+
+	if deleted == 0 {
+		respondWithError(w, 404, "Feed follow not found")
 		return
 	}
 
