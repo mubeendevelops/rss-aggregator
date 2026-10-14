@@ -137,6 +137,17 @@ expect_status "get posts" 200
 expect_json "get posts" 'type == "array"'
 pass "get posts"
 
+request "get posts page" GET "/posts?limit=5&offset=0" -H "$AUTH"
+expect_status "get posts page" 200
+expect_json "get posts page" 'type == "array"'
+pass "get posts page"
+
+for BAD_QUERY in "limit=0" "limit=101" "limit=abc" "offset=-1"; do
+  request "get posts $BAD_QUERY" GET "/posts?$BAD_QUERY" -H "$AUTH"
+  expect_status "get posts $BAD_QUERY" 400
+  pass "get posts $BAD_QUERY"
+done
+
 request "unfollow feed" DELETE "/feed_follows/$FOLLOW_ID" -H "$AUTH"
 expect_status "unfollow feed" 200
 pass "unfollow feed"

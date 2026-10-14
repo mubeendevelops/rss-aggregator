@@ -70,6 +70,7 @@ Migrations live under `sql/schema`:
 - `005_feeds_lastfetchedat.sql`
 - `006_posts.sql`
 - `007_users_apikey_drop_default.sql`
+- `008_indexes.sql`
 
 `make migrate` runs the equivalent of:
 
@@ -121,7 +122,7 @@ All routes are prefixed with `/v1`. Requests and responses use JSON.
 |---|---|
 | 200 | Successful read or delete |
 | 201 | Resource created (`POST`) |
-| 400 | Malformed JSON body, malformed ID, empty `name`, or a feed `url` that is not an absolute `http`/`https` URL |
+| 400 | Malformed JSON body, malformed ID, empty `name`, a feed `url` that is not an absolute `http`/`https` URL, or an out-of-range `limit`/`offset` |
 | 401 | Missing or malformed `Authorization` header, or unknown API key |
 | 404 | Feed follow not found on delete, or a referenced record (such as `feed_id`) does not exist |
 | 409 | Duplicate: the feed URL already exists, or the feed is already followed |
@@ -193,8 +194,16 @@ Errors have the shape `{"error": "message"}`. Database driver messages are never
 ### Posts
 
 - **GET** `/v1/posts` (auth required)  
-  Get the most recent posts for the authenticated user (across all followed feeds).  
-  Currently limited to 10 posts per the `GetPostsForUser` query.
+  Get the most recent posts for the authenticated user (across all followed feeds), newest first.
+
+  **Query parameters**:
+
+  | Parameter | Default | Allowed |
+  |---|---|---|
+  | `limit` | 10 | 1 to 100 |
+  | `offset` | 0 | 0 or greater |
+
+  For example `GET /v1/posts?limit=20&offset=40` returns the third page of 20. Values outside the allowed range return 400.
 
 ---
 
@@ -202,9 +211,9 @@ Errors have the shape `{"error": "message"}`. Database driver messages are never
 
 The scraper is started from `cmd/rss-aggregator/main.go`:
 
-- **Function**: `startScraping(db *database.Queries, concurrency int, timeBetweenRequest time.Duration)`
+- **Function**: `startScraping(ctx context.Context, db database.Querier, cfg scraperConfig)`
 - **Behavior**:
-  - Periodically selects the next feeds to fetch (`GetNextFeedsToFetch`).
+  - Periodically selects the next feeds to fetch (`GetNextFeedsToFetch`), least recently fetched first, skipping feeds fetched within the minimum refetch interval.
   - Spawns goroutines to fetch and parse RSS (`urlToFeed` in `cmd/rss-aggregator/rss.go`).
   - Inserts posts into the `posts` table via `CreatePost`, skipping duplicates on URL.
 
@@ -212,10 +221,13 @@ Fetching is defensive: responses must be 200 and at most 10 MB, each cycle has a
 
 The server has read, write and idle timeouts, and on SIGINT or SIGTERM it stops accepting requests, lets in-flight requests and the scraper finish, and exits.
 
-You can tune:
+You can tune the scraper with environment variables (see `.env.example`). Invalid values stop the server at startup.
 
-- **Concurrency**: number of goroutines scraping in parallel.
-- **Interval**: how often feeds are fetched (currently 30 seconds in `cmd/rss-aggregator/main.go`).
+| Variable | Default | Meaning |
+|---|---|---|
+| `SCRAPE_INTERVAL` | `30s` | Time between scrape cycles, as a Go duration (`30s`, `2m`, `1h`) |
+| `SCRAPE_CONCURRENCY` | `10` | Most feeds fetched per cycle, 1 to 100 |
+| `SCRAPE_MIN_REFETCH_INTERVAL` | `5m` | How long a feed is left alone after a fetch, so a small set of feeds is not hit every cycle. `0` disables it |
 
 ---
 
@@ -225,6 +237,7 @@ You can tune:
 cmd/rss-aggregator/     package main: the server binary
   main.go               entrypoint, configuration, server bootstrap, scraper start
   router.go             routes and CORS
+  config.go             scraper settings from the environment
   handler_*.go          HTTP handlers for users, feeds, feed follows, posts, readiness, error testing
   middleware_auth.go    authentication middleware using user API keys
   models.go, json.go    API response types and JSON helpers

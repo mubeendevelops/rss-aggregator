@@ -18,14 +18,13 @@ const scrapeCycleTimeout = time.Minute
 func startScraping(
 	ctx context.Context,
 	db database.Querier,
-	concurrency int,
-	timeBetweenRequest time.Duration,
+	cfg scraperConfig,
 ) {
-	log.Printf("Scraping on %v goroutines every %s duration", concurrency, timeBetweenRequest)
-	ticker := time.NewTicker(timeBetweenRequest)
+	log.Printf("Scraping on %v goroutines every %s duration, each feed at most once per %s", cfg.Concurrency, cfg.Interval, cfg.MinRefetchInterval)
+	ticker := time.NewTicker(cfg.Interval)
 	defer ticker.Stop()
 	for {
-		scrapeCycle(ctx, db, concurrency)
+		scrapeCycle(ctx, db, cfg.Concurrency, cfg.MinRefetchInterval)
 
 		select {
 		case <-ctx.Done():
@@ -36,13 +35,17 @@ func startScraping(
 	}
 }
 
-func scrapeCycle(ctx context.Context, db database.Querier, concurrency int) {
+// scrapeCycle fetches up to concurrency feeds that were not fetched within minRefetchInterval
+func scrapeCycle(ctx context.Context, db database.Querier, concurrency int, minRefetchInterval time.Duration) {
 	ctx, cancel := context.WithTimeout(ctx, scrapeCycleTimeout)
 	defer cancel()
 
 	feeds, err := db.GetNextFeedsToFetch(
 		ctx,
-		int32(concurrency),
+		database.GetNextFeedsToFetchParams{
+			FetchedBefore: time.Now().UTC().Add(-minRefetchInterval),
+			MaxFeeds:      int32(concurrency),
+		},
 	)
 
 	if err != nil {
