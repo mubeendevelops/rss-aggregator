@@ -17,7 +17,7 @@ const scrapeCycleTimeout = time.Minute
 // startScraping runs scrape cycles until ctx is cancelled
 func startScraping(
 	ctx context.Context,
-	db *database.Queries,
+	db database.Querier,
 	concurrency int,
 	timeBetweenRequest time.Duration,
 ) {
@@ -36,7 +36,7 @@ func startScraping(
 	}
 }
 
-func scrapeCycle(ctx context.Context, db *database.Queries, concurrency int) {
+func scrapeCycle(ctx context.Context, db database.Querier, concurrency int) {
 	ctx, cancel := context.WithTimeout(ctx, scrapeCycleTimeout)
 	defer cancel()
 
@@ -60,7 +60,7 @@ func scrapeCycle(ctx context.Context, db *database.Queries, concurrency int) {
 	wg.Wait()
 }
 
-func scrapeFeed(ctx context.Context, db *database.Queries, wg *sync.WaitGroup, feed database.Feed) {
+func scrapeFeed(ctx context.Context, db database.Querier, wg *sync.WaitGroup, feed database.Feed) {
 	defer wg.Done()
 
 	_, err := db.MarkFeedAsFetched(ctx, feed.ID)
