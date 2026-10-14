@@ -8,8 +8,10 @@ SELECT * FROM feeds;
 
 -- name: GetNextFeedsToFetch :many
 SELECT * FROM feeds
+WHERE last_fetched_at IS NULL
+OR last_fetched_at < sqlc.arg(fetched_before)::timestamp
 ORDER BY last_fetched_at ASC NULLS FIRST
-LIMIT $1;
+LIMIT sqlc.arg(max_feeds);
 
 -- name: MarkFeedAsFetched :one
 UPDATE feeds 

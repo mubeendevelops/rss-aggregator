@@ -40,6 +40,11 @@ func main() {
 		log.Fatal("DB_URL is not found in the environment or the .env file")
 	}
 
+	scraperCfg, err := loadScraperConfig(os.Getenv)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	conn, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatal("Cant open database: ", redactDBURL(err, dbURL))
@@ -71,11 +76,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	seconds := 30
 	scraperDone := make(chan struct{})
 	go func() {
 		defer close(scraperDone)
-		startScraping(ctx, db, 10, time.Duration(seconds)*time.Second)
+		startScraping(ctx, db, scraperCfg)
 	}()
 
 	fmt.Println("Port:", portString)
