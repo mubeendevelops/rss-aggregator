@@ -30,7 +30,7 @@ func (apiCfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Reques
 		Name:      params.Name,
 	})
 	if err != nil {
-		respondWithError(w, 400, fmt.Sprintf("Couldnt create user: %v", err))
+		respondWithDBError(w, "create user", err)
 		return
 	}
 
@@ -47,7 +47,7 @@ func (apiCfg *apiConfig) handlerGetPostsForUser(w http.ResponseWriter, r *http.R
 		Limit:  10,
 	})
 	if err != nil {
-		respondWithError(w, 400, fmt.Sprintf("Couldnt get posts: %v", err))
+		respondWithDBError(w, "get posts", err)
 		return
 	}
 

@@ -41,7 +41,7 @@ go mod tidy
 
 ### 2. Configure Environment
 
-Copy `.env.example` to `.env` in the project root:
+Copy `.env.example` to `.env` in the project root. The `.env` file is optional: the server also starts when `PORT` and `DB_URL` are set as real environment variables.
 
 ```bash
 cp .env.example .env
@@ -114,6 +114,20 @@ All routes are prefixed with `/v1`. Requests and responses use JSON.
 
 > **Auth**: Authenticated routes expect an API key, typically via a header like `Authorization: ApiKey <your-key>`. Check `cmd/rss-aggregator/middleware_auth.go` and `internal/auth` for the exact header format if you adjust it.
 
+### Status Codes
+
+| Code | Meaning |
+|---|---|
+| 200 | Successful read or delete |
+| 201 | Resource created (`POST`) |
+| 400 | Malformed JSON body or malformed ID |
+| 401 | Missing or malformed `Authorization` header, or unknown API key |
+| 404 | Feed follow not found on delete, or a referenced record (such as `feed_id`) does not exist |
+| 409 | Duplicate: the feed URL already exists, or the feed is already followed |
+| 500 | Server fault. The body is a generic message and the details are logged server-side |
+
+Errors have the shape `{"error": "message"}`. Database driver messages are never returned to clients.
+
 ### Health
 
 - **GET** `/v1/healthz`  
@@ -133,15 +147,15 @@ All routes are prefixed with `/v1`. Requests and responses use JSON.
   }
   ```
 
-  **Response**: User object with generated `id` and `api_key`.
+  **Response**: 201 with the user object, including the generated `id` and `api_key`.
 
 - **GET** `/v1/users` (auth required)  
-  Returns the authenticated user.
+  Returns 200 with the authenticated user.
 
 ### Feeds
 
 - **POST** `/v1/feeds` (auth required)  
-  Create a feed owned by the authenticated user.
+  Create a feed owned by the authenticated user. Returns 201, or 409 if the URL is already registered.
 
   **Body**:
 
@@ -153,12 +167,12 @@ All routes are prefixed with `/v1`. Requests and responses use JSON.
   ```
 
 - **GET** `/v1/feeds`  
-  List all feeds in the system.
+  Returns 200 with all feeds in the system.
 
 ### Feed Follows
 
 - **POST** `/v1/feed_follows` (auth required)  
-  Follow a feed.
+  Follow a feed. Returns 201, 409 if already followed, or 404 if the feed does not exist.
 
   **Body**:
 
@@ -169,10 +183,10 @@ All routes are prefixed with `/v1`. Requests and responses use JSON.
   ```
 
 - **GET** `/v1/feed_follows` (auth required)  
-  List feeds followed by the authenticated user.
+  Returns 200 with the feeds followed by the authenticated user.
 
 - **DELETE** `/v1/feed_follows/{feedFollowID}` (auth required)  
-  Unfollow a feed.
+  Unfollow a feed. Returns 200, or 404 if the follow does not exist or belongs to another user.
 
 ### Posts
 
@@ -207,6 +221,7 @@ cmd/rss-aggregator/     package main: the server binary
   handler_*.go          HTTP handlers for users, feeds, feed follows, posts, readiness, error testing
   middleware_auth.go    authentication middleware using user API keys
   models.go, json.go    API response types and JSON helpers
+  db_errors.go          maps database errors to HTTP status codes
   rss.go                RSS XML fetching and parsing
   scraper.go            periodic scraping logic and post creation
 internal/auth/          API key header parsing

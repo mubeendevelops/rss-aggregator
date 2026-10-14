@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi"
@@ -21,23 +23,37 @@ type apiConfig struct {
 
 func main() {
 
-	if err := godotenv.Load(".env"); err != nil {
-		log.Fatal("Error loading .env file")
+	// .env is optional so the server can run from real environment variables
+	if _, err := os.Stat(".env"); err == nil {
+		if err := godotenv.Load(".env"); err != nil {
+			log.Fatal("Error loading .env file")
+		}
 	}
 
 	portString := os.Getenv("PORT")
 	if portString == "" {
-		log.Fatal("PORT is not found in the env file")
+		log.Fatal("PORT is not found in the environment or the .env file")
 	}
 
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
-		log.Fatal("DB_URL is not found in the env file")
+		log.Fatal("DB_URL is not found in the environment or the .env file")
 	}
 
 	conn, err := sql.Open("postgres", dbURL)
 	if err != nil {
-		log.Fatal("Cant connect to database", err)
+		log.Fatal("Cant open database: ", redactDBURL(err, dbURL))
+	}
+
+	conn.SetMaxOpenConns(25)
+	conn.SetMaxIdleConns(10)
+	conn.SetConnMaxLifetime(30 * time.Minute)
+
+	pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	err = conn.PingContext(pingCtx)
+	cancel()
+	if err != nil {
+		log.Fatal("Cant connect to database, check DB_URL: ", redactDBURL(err, dbURL))
 	}
 
 	db := database.New(conn)
@@ -50,7 +66,6 @@ func main() {
 	go startScraping(db, 10, time.Duration(seconds)*time.Second)
 
 	fmt.Println("Port:", portString)
-	fmt.Println("DB_URL:", dbURL)
 
 	router := chi.NewRouter()
 
@@ -91,4 +106,9 @@ func main() {
 		log.Fatal(err)
 	}
 
+}
+
+// redactDBURL keeps the connection string, which holds the password, out of error logs
+func redactDBURL(err error, dbURL string) string {
+	return strings.ReplaceAll(err.Error(), dbURL, "[DB_URL]")
 }
