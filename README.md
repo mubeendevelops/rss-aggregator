@@ -13,7 +13,7 @@ Backend service that lets users register, follow RSS feeds, and read aggregated 
 ### Tech Stack
 
 - **Language**: Go
-- **Framework**: `go-chi/chi` for routing, `go-chi/cors` for CORS
+- **Framework**: `go-chi/chi/v5` for routing, `go-chi/cors` for CORS
 - **Database**: PostgreSQL
 - **Migrations**: `goose`-style SQL migrations under `sql/schema`
 - **Queries**: Generated with `sqlc` (`internal/database`)
@@ -24,7 +24,7 @@ Backend service that lets users register, follow RSS feeds, and read aggregated 
 
 ### Prerequisites
 
-- Go 1.25.4 or newer (the version pinned in `go.mod`)
+- Go 1.26.9 or newer (the version pinned in `go.mod`; older Go 1.21+ toolchains download it automatically)
 - Docker with Compose (for the bundled PostgreSQL), or your own PostgreSQL
 - [`goose`](https://github.com/pressly/goose) to run migrations
 - [`sqlc`](https://sqlc.dev) only if you change the SQL under `sql/queries`
