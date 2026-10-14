@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
@@ -20,7 +19,17 @@ func (apiCfg *apiConfig) handlerCreateFeed(w http.ResponseWriter, r *http.Reques
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		respondWithError(w, 400, fmt.Sprintf("Error parsing JSON: %v", err))
+		respondWithDecodeError(w, err)
+		return
+	}
+
+	if err := validateName("name", params.Name); err != nil {
+		respondWithError(w, 400, err.Error())
+		return
+	}
+
+	if err := validateFeedURL(params.URL); err != nil {
+		respondWithError(w, 400, err.Error())
 		return
 	}
 

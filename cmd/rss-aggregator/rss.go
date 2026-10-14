@@ -34,18 +34,18 @@ type RSSItem struct {
 	PubDate     string `xml:"pubDate"`
 }
 
-func urlToFeed(ctx context.Context, url string) (RSSFeed, error) {
-	httpClient := http.Client{
-		Timeout: 10 * time.Second,
-	}
+// feedHTTPClient fetches feeds. By default it refuses loopback, private and
+// link-local destinations, main replaces it when FEED_ALLOW_PRIVATE_ADDRESSES is set.
+var feedHTTPClient = newFeedHTTPClient(false)
 
+func urlToFeed(ctx context.Context, url string) (RSSFeed, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return RSSFeed{}, err
 	}
 	req.Header.Set("User-Agent", feedUserAgent)
 
-	res, err := httpClient.Do(req)
+	res, err := feedHTTPClient.Do(req)
 	if err != nil {
 		return RSSFeed{}, err
 	}

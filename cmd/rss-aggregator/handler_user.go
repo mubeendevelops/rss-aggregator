@@ -2,11 +2,12 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/mubeencodes/rss-aggregator/internal/auth"
 	"github.com/mubeencodes/rss-aggregator/internal/database"
 )
 
@@ -19,7 +20,19 @@ func (apiCfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Reques
 	params := parameters{}
 	err := decoder.Decode(&params)
 	if err != nil {
-		respondWithError(w, 400, fmt.Sprintf("Error parsing JSON: %v", err))
+		respondWithDecodeError(w, err)
+		return
+	}
+
+	if err := validateName("name", params.Name); err != nil {
+		respondWithError(w, 400, err.Error())
+		return
+	}
+
+	apiKey, err := auth.GenerateAPIKey()
+	if err != nil {
+		log.Printf("Couldnt generate API key: %v", err)
+		respondWithError(w, 500, "Internal server error")
 		return
 	}
 
@@ -28,6 +41,7 @@ func (apiCfg *apiConfig) handlerCreateUser(w http.ResponseWriter, r *http.Reques
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 		Name:      params.Name,
+		ApiKey:    apiKey,
 	})
 	if err != nil {
 		respondWithDBError(w, "create user", err)

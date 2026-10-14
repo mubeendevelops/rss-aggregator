@@ -2,9 +2,32 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"log"
 	"net/http"
 )
+
+// maxBodyBytes caps the size of a request body
+const maxBodyBytes = 1 << 20
+
+// middlewareBodyLimit makes reads past maxBodyBytes fail instead of buffering them
+func middlewareBodyLimit(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+		next.ServeHTTP(w, r)
+	})
+}
+
+// respondWithDecodeError answers a failed JSON body decode
+func respondWithDecodeError(w http.ResponseWriter, err error) {
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		respondWithError(w, 413, fmt.Sprintf("Request body is larger than %d bytes", maxBodyBytes))
+		return
+	}
+	respondWithError(w, 400, fmt.Sprintf("Error parsing JSON: %v", err))
+}
 
 func respondWithError(w http.ResponseWriter, code int, msg string) {
 	if code > 499 {

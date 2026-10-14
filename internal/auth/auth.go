@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"strings"
@@ -27,4 +29,13 @@ func GetAPIKey(headers http.Header) (string, error) {
 	}
 
 	return values[1], nil
+}
+
+// GenerateAPIKey returns a new API key: 32 random bytes from crypto/rand, hex encoded (64 characters)
+func GenerateAPIKey() (string, error) {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(key), nil
 }
