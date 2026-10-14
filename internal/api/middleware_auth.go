@@ -1,4 +1,4 @@
-package main
+package api
 
 import (
 	"database/sql"
@@ -13,7 +13,7 @@ import (
 
 type authedHandler func(http.ResponseWriter, *http.Request, database.User)
 
-func (apiCfg *apiConfig) middlewareAuth(handler authedHandler) http.HandlerFunc {
+func (apiCfg *Config) middlewareAuth(handler authedHandler) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		apiKey, err := auth.GetAPIKey(r.Header)
 		if err != nil {

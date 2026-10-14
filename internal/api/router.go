@@ -1,14 +1,20 @@
-package main
+package api
 
 import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
+	"github.com/mubeencodes/rss-aggregator/internal/database"
 )
 
-// newRouter builds the HTTP routes. It is separate from main so tests can serve the same routes.
-func newRouter(apiCfg *apiConfig) http.Handler {
+// Config holds what the handlers need
+type Config struct {
+	DB database.Querier
+}
+
+// NewRouter builds the HTTP routes. It is separate from main so tests can serve the same routes.
+func NewRouter(apiCfg *Config) http.Handler {
 	router := chi.NewRouter()
 
 	router.Use(middlewareBodyLimit)

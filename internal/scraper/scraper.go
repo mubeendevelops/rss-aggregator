@@ -1,4 +1,4 @@
-package main
+package scraper
 
 import (
 	"context"
@@ -9,16 +9,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/mubeencodes/rss-aggregator/internal/database"
+	"github.com/mubeencodes/rss-aggregator/internal/rss"
 )
 
 // scrapeCycleTimeout bounds the database calls and HTTP requests of one cycle
 const scrapeCycleTimeout = time.Minute
 
-// startScraping runs scrape cycles until ctx is cancelled
-func startScraping(
+// Start runs scrape cycles until ctx is cancelled
+func Start(
 	ctx context.Context,
 	db database.Querier,
-	cfg scraperConfig,
+	cfg Config,
 ) {
 	log.Printf("Scraping on %v goroutines every %s duration, each feed at most once per %s", cfg.Concurrency, cfg.Interval, cfg.MinRefetchInterval)
 	ticker := time.NewTicker(cfg.Interval)
@@ -72,7 +73,7 @@ func scrapeFeed(ctx context.Context, db database.Querier, wg *sync.WaitGroup, fe
 		return
 	}
 
-	rssFeed, err := urlToFeed(ctx, feed.Url)
+	rssFeed, err := rss.FetchFeed(ctx, feed.Url)
 	if err != nil {
 		log.Println("Error fetching feed", err)
 		return
@@ -85,7 +86,7 @@ func scrapeFeed(ctx context.Context, db database.Querier, wg *sync.WaitGroup, fe
 			description.Valid = true
 		}
 
-		pubAt, err := parsePubDate(item.PubDate)
+		pubAt, err := rss.ParsePubDate(item.PubDate)
 		if err != nil {
 			log.Printf("Couldnt parse date %v with err %v", item.PubDate, err)
 			continue

@@ -14,12 +14,11 @@ import (
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
+	"github.com/mubeencodes/rss-aggregator/internal/api"
 	"github.com/mubeencodes/rss-aggregator/internal/database"
+	"github.com/mubeencodes/rss-aggregator/internal/rss"
+	"github.com/mubeencodes/rss-aggregator/internal/scraper"
 )
-
-type apiConfig struct {
-	DB database.Querier
-}
 
 func main() {
 
@@ -40,7 +39,7 @@ func main() {
 		log.Fatal("DB_URL is not found in the environment or the .env file")
 	}
 
-	scraperCfg, err := loadScraperConfig(os.Getenv)
+	scraperCfg, err := scraper.LoadConfig(os.Getenv)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -63,13 +62,13 @@ func main() {
 
 	db := database.New(conn)
 
-	apiCfg := apiConfig{
+	apiCfg := api.Config{
 		DB: db,
 	}
 
 	if os.Getenv("FEED_ALLOW_PRIVATE_ADDRESSES") == "true" {
 		log.Println("FEED_ALLOW_PRIVATE_ADDRESSES is set, feeds on loopback and private addresses will be fetched")
-		feedHTTPClient = newFeedHTTPClient(true)
+		rss.AllowPrivateAddresses()
 	}
 
 	// ctx is cancelled on SIGINT or SIGTERM, which stops the scraper and the server
@@ -79,12 +78,12 @@ func main() {
 	scraperDone := make(chan struct{})
 	go func() {
 		defer close(scraperDone)
-		startScraping(ctx, db, scraperCfg)
+		scraper.Start(ctx, db, scraperCfg)
 	}()
 
 	fmt.Println("Port:", portString)
 
-	router := newRouter(&apiCfg)
+	router := api.NewRouter(&apiCfg)
 
 	srv := &http.Server{
 		Handler:           router,
