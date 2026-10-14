@@ -46,7 +46,8 @@ func main() {
 		DB: db,
 	}
 
-	go startScraping(db, 10, time.Minute)
+	seconds := 30
+	go startScraping(db, 10, time.Duration(seconds)*time.Second)
 
 	fmt.Println("Port:", portString)
 	fmt.Println("DB_URL:", dbURL)
