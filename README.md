@@ -223,7 +223,8 @@ You can tune:
 
 ```
 cmd/rss-aggregator/     package main: the server binary
-  main.go               entrypoint, router setup, CORS, server bootstrap, scraper start
+  main.go               entrypoint, configuration, server bootstrap, scraper start
+  router.go             routes and CORS
   handler_*.go          HTTP handlers for users, feeds, feed follows, posts, readiness, error testing
   middleware_auth.go    authentication middleware using user API keys
   models.go, json.go    API response types and JSON helpers
@@ -238,6 +239,7 @@ sql/schema/             goose migrations
 sql/queries/            source SQL used by sqlc
 web/index.html          static demo page for the API
 scripts/smoke.sh        end-to-end smoke test
+.github/workflows/      CI
 docker-compose.yml, Makefile, .env.example    local development tooling
 ```
 
