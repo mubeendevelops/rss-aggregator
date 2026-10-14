@@ -45,10 +45,21 @@ request "create user" POST /users -H 'Content-Type: application/json' \
   -d "{\"name\":\"smoke-$UNIQUE\"}"
 expect_status "create user" 201
 expect_json "create user" '.id and .api_key and .name'
+expect_json "create user" '.api_key | test("^[0-9a-f]{64}$")'
 API_KEY="$(jq -r '.api_key' "$BODY")"
 USER_ID="$(jq -r '.id' "$BODY")"
 AUTH="Authorization: ApiKey $API_KEY"
 pass "create user"
+
+request "second user" POST /users -H 'Content-Type: application/json' \
+  -d "{\"name\":\"smoke-$UNIQUE-b\"}"
+expect_status "second user" 201
+expect_json "second user" ".api_key != \"$API_KEY\""
+pass "second user"
+
+request "empty user name" POST /users -H 'Content-Type: application/json' -d '{"name":"  "}'
+expect_status "empty user name" 400
+pass "empty user name"
 
 request "no auth header" GET /users
 expect_status "no auth header" 401
@@ -75,6 +86,18 @@ expect_status "create feed" 201
 expect_json "create feed" ".id and .url == \"$FEED_URL\" and .user_id == \"$USER_ID\""
 FEED_ID="$(jq -r '.id' "$BODY")"
 pass "create feed"
+
+request "empty feed name" POST /feeds -H "$AUTH" -H 'Content-Type: application/json' \
+  -d "{\"name\":\"\",\"url\":\"http://smoke-$UNIQUE-x.invalid/feed.xml\"}"
+expect_status "empty feed name" 400
+pass "empty feed name"
+
+for BAD_URL in "" "file:///etc/passwd" "ftp://example.invalid/feed.xml" "example.invalid/feed.xml" "http://"; do
+  request "bad feed url '$BAD_URL'" POST /feeds -H "$AUTH" -H 'Content-Type: application/json' \
+    -d "{\"name\":\"smoke bad url\",\"url\":\"$BAD_URL\"}"
+  expect_status "bad feed url '$BAD_URL'" 400
+  pass "bad feed url '$BAD_URL'"
+done
 
 request "duplicate feed url" POST /feeds -H "$AUTH" -H 'Content-Type: application/json' \
   -d "{\"name\":\"smoke feed again\",\"url\":\"$FEED_URL\"}"

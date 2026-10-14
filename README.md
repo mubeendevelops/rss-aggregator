@@ -69,6 +69,7 @@ Migrations live under `sql/schema`:
 - `004_feed_follows.sql`
 - `005_feeds_lastfetchedat.sql`
 - `006_posts.sql`
+- `007_users_apikey_drop_default.sql`
 
 `make migrate` runs the equivalent of:
 
@@ -120,10 +121,11 @@ All routes are prefixed with `/v1`. Requests and responses use JSON.
 |---|---|
 | 200 | Successful read or delete |
 | 201 | Resource created (`POST`) |
-| 400 | Malformed JSON body or malformed ID |
+| 400 | Malformed JSON body, malformed ID, empty `name`, or a feed `url` that is not an absolute `http`/`https` URL |
 | 401 | Missing or malformed `Authorization` header, or unknown API key |
 | 404 | Feed follow not found on delete, or a referenced record (such as `feed_id`) does not exist |
 | 409 | Duplicate: the feed URL already exists, or the feed is already followed |
+| 413 | Request body larger than 1 MB |
 | 500 | Server fault. The body is a generic message and the details are logged server-side |
 
 Errors have the shape `{"error": "message"}`. Database driver messages are never returned to clients.
@@ -147,7 +149,7 @@ Errors have the shape `{"error": "message"}`. Database driver messages are never
   }
   ```
 
-  **Response**: 201 with the user object, including the generated `id` and `api_key`.
+  **Response**: 201 with the user object, including the generated `id` and `api_key`. The key is 32 bytes from `crypto/rand`, hex encoded (64 characters). `name` must not be empty.
 
 - **GET** `/v1/users` (auth required)  
   Returns 200 with the authenticated user.
@@ -155,7 +157,7 @@ Errors have the shape `{"error": "message"}`. Database driver messages are never
 ### Feeds
 
 - **POST** `/v1/feeds` (auth required)  
-  Create a feed owned by the authenticated user. Returns 201, or 409 if the URL is already registered.
+  Create a feed owned by the authenticated user. Returns 201, or 409 if the URL is already registered. `name` must not be empty and `url` must be an absolute `http` or `https` URL, otherwise 400.
 
   **Body**:
 
@@ -206,6 +208,10 @@ The scraper is started from `cmd/rss-aggregator/main.go`:
   - Spawns goroutines to fetch and parse RSS (`urlToFeed` in `cmd/rss-aggregator/rss.go`).
   - Inserts posts into the `posts` table via `CreatePost`, skipping duplicates on URL.
 
+Fetching is defensive: responses must be 200 and at most 10 MB, each cycle has a one minute timeout, and the HTTP client refuses to connect to loopback, private, link-local and unspecified addresses (checked after DNS resolution and on every redirect), so a feed URL cannot be used to reach internal services. Set `FEED_ALLOW_PRIVATE_ADDRESSES=true` to fetch from a feed server on your own machine while testing.
+
+The server has read, write and idle timeouts, and on SIGINT or SIGTERM it stops accepting requests, lets in-flight requests and the scraper finish, and exits.
+
 You can tune:
 
 - **Concurrency**: number of goroutines scraping in parallel.
@@ -222,9 +228,11 @@ cmd/rss-aggregator/     package main: the server binary
   middleware_auth.go    authentication middleware using user API keys
   models.go, json.go    API response types and JSON helpers
   db_errors.go          maps database errors to HTTP status codes
+  validate.go           request input validation
+  feed_client.go        HTTP client for feeds with the private-address guard
   rss.go                RSS XML fetching and parsing
   scraper.go            periodic scraping logic and post creation
-internal/auth/          API key header parsing
+internal/auth/          API key generation and header parsing
 internal/database/      sqlc-generated types and queries
 sql/schema/             goose migrations
 sql/queries/            source SQL used by sqlc

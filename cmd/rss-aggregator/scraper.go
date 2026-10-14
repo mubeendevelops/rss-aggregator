@@ -14,20 +14,30 @@ import (
 // scrapeCycleTimeout bounds the database calls and HTTP requests of one cycle
 const scrapeCycleTimeout = time.Minute
 
+// startScraping runs scrape cycles until ctx is cancelled
 func startScraping(
+	ctx context.Context,
 	db *database.Queries,
 	concurrency int,
 	timeBetweenRequest time.Duration,
 ) {
 	log.Printf("Scraping on %v goroutines every %s duration", concurrency, timeBetweenRequest)
 	ticker := time.NewTicker(timeBetweenRequest)
-	for ; ; <-ticker.C {
-		scrapeCycle(db, concurrency)
+	defer ticker.Stop()
+	for {
+		scrapeCycle(ctx, db, concurrency)
+
+		select {
+		case <-ctx.Done():
+			log.Println("Scraper stopped")
+			return
+		case <-ticker.C:
+		}
 	}
 }
 
-func scrapeCycle(db *database.Queries, concurrency int) {
-	ctx, cancel := context.WithTimeout(context.Background(), scrapeCycleTimeout)
+func scrapeCycle(ctx context.Context, db *database.Queries, concurrency int) {
+	ctx, cancel := context.WithTimeout(ctx, scrapeCycleTimeout)
 	defer cancel()
 
 	feeds, err := db.GetNextFeedsToFetch(

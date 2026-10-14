@@ -7,7 +7,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi"
@@ -62,12 +64,27 @@ func main() {
 		DB: db,
 	}
 
+	if os.Getenv("FEED_ALLOW_PRIVATE_ADDRESSES") == "true" {
+		log.Println("FEED_ALLOW_PRIVATE_ADDRESSES is set, feeds on loopback and private addresses will be fetched")
+		feedHTTPClient = newFeedHTTPClient(true)
+	}
+
+	// ctx is cancelled on SIGINT or SIGTERM, which stops the scraper and the server
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	seconds := 30
-	go startScraping(db, 10, time.Duration(seconds)*time.Second)
+	scraperDone := make(chan struct{})
+	go func() {
+		defer close(scraperDone)
+		startScraping(ctx, db, 10, time.Duration(seconds)*time.Second)
+	}()
 
 	fmt.Println("Port:", portString)
 
 	router := chi.NewRouter()
+
+	router.Use(middlewareBodyLimit)
 
 	router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"https://*", "http://*"},
@@ -97,15 +114,45 @@ func main() {
 	router.Mount("/v1", v1Router)
 
 	srv := &http.Server{
-		Handler: router,
-		Addr:    ":" + portString,
+		Handler:           router,
+		Addr:              ":" + portString,
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       15 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
-	log.Printf("Server starting on port %v", portString)
-	if err := srv.ListenAndServe(); err != nil {
+	serverErr := make(chan error, 1)
+	go func() {
+		log.Printf("Server starting on port %v", portString)
+		serverErr <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErr:
 		log.Fatal(err)
+	case <-ctx.Done():
+	}
+	stop()
+
+	log.Println("Shutting down")
+	shutdownCtx, cancelShutdown := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelShutdown()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Println("Error shutting down server:", err)
 	}
 
+	select {
+	case <-scraperDone:
+	case <-shutdownCtx.Done():
+		log.Println("Scraper did not stop in time")
+	}
+
+	if err := conn.Close(); err != nil {
+		log.Println("Error closing database:", err)
+	}
+	log.Println("Shutdown complete")
 }
 
 // redactDBURL keeps the connection string, which holds the password, out of error logs
