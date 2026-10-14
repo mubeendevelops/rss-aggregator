@@ -24,14 +24,16 @@ Backend service that lets users register, follow RSS feeds, and read aggregated 
 
 ### Prerequisites
 
-- Go (1.21+ recommended)
-- PostgreSQL running locally or in Docker
-- `goose` (optional, if you want to run migrations yourself)
+- Go 1.25.4 or newer (the version pinned in `go.mod`)
+- Docker with Compose (for the bundled PostgreSQL), or your own PostgreSQL
+- [`goose`](https://github.com/pressly/goose) to run migrations
+- [`sqlc`](https://sqlc.dev) only if you change the SQL under `sql/queries`
+- `curl` and `jq` for the smoke test
 
 ### 1. Clone & Install
 
 ```bash
-git clone https://github.com/mubeencodes/rss-aggregator.git
+git clone https://github.com/mubeendevelops/rss-aggregator.git
 cd rss-aggregator
 
 go mod tidy
@@ -39,16 +41,25 @@ go mod tidy
 
 ### 2. Configure Environment
 
-Create a `.env` file in the project root:
+Copy `.env.example` to `.env` in the project root:
+
+```bash
+cp .env.example .env
+```
 
 ```bash
 PORT=8080
-DB_URL=postgres://user:password@localhost:5432/rss_aggregator?sslmode=disable
+DB_URL=postgres://postgres:postgres@localhost:5432/rss-aggregator?sslmode=disable
 ```
 
-Adjust the connection string to match your local PostgreSQL setup.
+The defaults match the PostgreSQL service in `docker-compose.yml`. Adjust the connection string if you use your own PostgreSQL.
 
-### 3. Run Database Migrations
+### 3. Start PostgreSQL and Run Database Migrations
+
+```bash
+make db-up      # docker compose up -d --wait (postgres:16 on localhost:5432)
+make migrate    # goose up on sql/schema using DB_URL from .env
+```
 
 Migrations live under `sql/schema`:
 
@@ -59,7 +70,7 @@ Migrations live under `sql/schema`:
 - `005_feeds_lastfetchedat.sql`
 - `006_posts.sql`
 
-If you use `goose`, an example command would look like:
+`make migrate` runs the equivalent of:
 
 ```bash
 goose -dir ./sql/schema postgres "$DB_URL" up
@@ -70,12 +81,30 @@ Alternatively, you can apply the SQL files manually using any PostgreSQL client.
 ### 4. Run the Server
 
 ```bash
-go run ./...
+make run        # go run .
 ```
 
 The server will start on `http://localhost:$PORT` (default from `.env`, e.g. `8080`).
 
 You’ll also see logs from the background scraper, which periodically fetches new posts from configured feeds.
+
+### 5. Try It
+
+- `make smoke` runs `scripts/smoke.sh`, a curl script that exercises every endpoint against the running server.
+- `index.html` is a static demo page. Open it from disk in a browser and it talks to the API at `http://localhost:8080/v1`.
+
+### Makefile Targets
+
+| Target | What it does |
+|---|---|
+| `db-up`, `db-down` | Start and stop PostgreSQL with Docker Compose |
+| `migrate`, `migrate-down` | `goose up` / `goose down` on `sql/schema` |
+| `sqlc` | `sqlc generate`, regenerating `internal/database` from `sql/queries` |
+| `run`, `build` | Run the server, or build it to `bin/rss-aggregator` |
+| `lint`, `vuln` | `golangci-lint`, `govulncheck` |
+| `smoke` | End-to-end check against the running server |
+
+The Makefile reads variables from `.env`. Use `make ENV_FILE=.env.example <target>` to run against the Compose defaults without a local `.env`.
 
 ---
 
@@ -166,7 +195,7 @@ The scraper is started from `main.go`:
 You can tune:
 
 - **Concurrency**: number of goroutines scraping in parallel.
-- **Interval**: how often feeds are fetched (currently `time.Minute` in `main.go`).
+- **Interval**: how often feeds are fetched (currently 30 seconds in `main.go`).
 
 ---
 
@@ -180,5 +209,8 @@ You can tune:
 - `sql/queries` – Source SQL used by `sqlc`.
 - `rss.go` – RSS XML parsing into Go structs.
 - `scraper.go` – Periodic scraping logic and post creation.
+- `index.html` – Static demo page for the API.
+- `scripts/smoke.sh` – End-to-end smoke test.
+- `docker-compose.yml`, `Makefile`, `.env.example` – Local development tooling.
 
 ---
